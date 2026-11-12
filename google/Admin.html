@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base target="_blank">
+<style>
+  :root { color-scheme: dark; font-family: Tahoma, sans-serif; color: #f5f0e5; background: #141411; --line: #514637; --accent: #d4b57f; --surface: #201e18; }
+  * { box-sizing: border-box; }
+  body { margin: auto; max-width: 1200px; padding: 22px; line-height: 1.65; }
+  header, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  header { justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: clamp(22px, 5vw, 35px); }
+  h2 { margin-top: 0; }
+  a { color: var(--accent); }
+  button, input, select { font: inherit; }
+  button, input, select { padding: 7px 10px; border: 1px solid var(--line); background: var(--surface); color: inherit; border-radius: 4px; }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: #141411; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  fieldset { padding: 0; border: 0; margin: 0; min-width: 0; }
+  .layout { display: grid; grid-template-columns: minmax(220px, 28%) 1fr; gap: 20px; }
+  .panel { border: 1px solid var(--line); padding: 15px; min-width: 0; }
+  .items { display: grid; gap: 6px; margin: 10px 0 20px; }
+  .items button { text-align: start; overflow-wrap: anywhere; }
+  .items button[aria-current="true"] { border-color: var(--accent); }
+  label { display: grid; gap: 3px; margin-bottom: 10px; }
+  #status { min-height: 1.65em; color: var(--accent); }
+  #status.error { color: #ffb8a6; }
+  .toolbar { padding: 10px 0; border-block: 1px solid var(--line); margin-top: 16px; }
+  .toolbar .group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toolbar .group + .group { margin-top: 8px; }
+  .blocks { padding: 12px 0; min-height: 90px; }
+  .blocks.over { outline: 2px dashed var(--accent); }
+  .block { border: 1px solid var(--line); margin: 0 0 10px; padding: 8px; }
+  .block-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 8px; color: #c4b9a5; }
+  .block-controls span { flex: 1; }
+  .block-controls button { padding: 2px 8px; }
+  .editable { min-height: 40px; overflow-wrap: anywhere; padding: 6px; }
+  .editable:empty::before { content: attr(data-placeholder); color: #c4b9a5; }
+  .block[data-type="h2"] .editable { font-size: 25px; font-weight: bold; }
+  .block[data-type="h3"] .editable { font-size: 20px; font-weight: bold; }
+  .block[data-type="quote"] .editable { border-inline-start: 3px solid var(--accent); }
+  .block img { max-width: 100%; max-height: 360px; object-fit: contain; display: block; margin-bottom: 8px; }
+  @media (max-width: 650px) { body { padding: 12px; } .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header><h1>إدارة الأرشيف</h1><a href="https://techaura26-max.github.io/religion-archive/">فتح الموقع ↗</a></header>
+<p id="status" role="status"></p>
+<fieldset id="workspace" disabled>
+  <div class="layout">
+    <aside class="panel">
+      <label>الديانة <select id="religion">
+        <option value="islam">الإسلام</option><option value="christianity">المسيحية</option><option value="judaism">اليهودية</option>
+      </select></label>
+      <button type="button" id="new-topic">موضوع جديد</button>
+      <div id="topics" class="items"></div>
+      <button type="button" id="new-article" disabled>مقال جديد</button>
+      <div id="articles" class="items"></div>
+    </aside>
+    <main id="editor" class="panel">
+      <p id="empty">اختار موضوع أو أضف موضوع جديد.</p>
+      <form id="topic-form" hidden>
+        <h2>الموضوع</h2>
+        <label>اسم الموضوع <input id="topic-title" required maxlength="180"></label>
+        <label>الترتيب <input id="topic-order" type="number" step="1" required value="0"></label>
+        <div class="actions">
+          <button class="primary">حفظ الموضوع</button>
+          <button type="button" id="delete-topic">حذف الموضوع</button>
+        </div>
+      </form>
+      <form id="article-form" hidden>
+        <h2>المقال</h2>
+        <label>العنوان <input id="article-title" required maxlength="180"></label>
+        <label>الموضوع <select id="article-topic" required></select></label>
+        <label>الترتيب <input id="article-order" type="number" step="1" required value="0"></label>
+        <div class="toolbar" aria-label="أدوات المقال">
+          <div class="group" id="insert">
+            <button type="button" data-block="p">فقرة</button>
+            <button type="button" data-block="h2">عنوان فرعي</button>
+            <button type="button" data-block="h3">عنوان أصغر</button>
+            <button type="button" data-block="quote">اقتباس</button>
+            <button type="button" data-block="references">مراجع</button>
+            <button type="button" id="pick-image">رفع صور</button>
+            <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+          </div>
+          <div class="group" id="format">
+            <button type="button" data-command="bold">غامق</button>
+            <button type="button" data-command="italic">مائل</button>
+            <button type="button" data-command="underline">تسطير</button>
+            <button type="button" data-command="insertUnorderedList">قائمة</button>
+            <button type="button" data-command="insertOrderedList">قائمة مرقّمة</button>
+            <button type="button" data-command="createLink">رابط</button>
+          </div>
+        </div>
+        <div id="blocks" class="blocks" aria-label="محتوى المقال"></div>
+        <div class="actions">
+          <button class="primary" value="draft">حفظ مسودة</button>
+          <button class="primary" value="publish">نشر</button>
+          <button type="submit" value="hide" id="hide-article">إخفاء</button>
+          <button type="button" id="delete-article">حذف المقال</button>
+          <a id="public-link" hidden>فتح المقال ↗</a>
+        </div>
+      </form>
+    </main>
+  </div>
+</fieldset>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const site = 'https://techaura26-max.github.io/religion-archive/';
+const topicForm = $('topic-form');
+const articleForm = $('article-form');
+const blocks = $('blocks');
+const labels = {p: 'فقرة', h2: 'عنوان فرعي', h3: 'عنوان أصغر', quote: 'اقتباس', references: 'مراجع', image: 'صورة'};
+const accepted = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const markup = new Set(['a', 'b', 'br', 'code', 'div', 'em', 'i', 'li', 'ol', 'p', 's', 'span', 'strong', 'u', 'ul']);
+const discard = new Set(['script', 'style', 'iframe', 'object', 'template', 'svg', 'math']);
+let index = {topics: [], articles: []};
+let topic = null;
+let article = null;
+let currentBlock = null;
+let selection = null;
+let dirty = false;
+let pending = 0;
+
+function rpc(name, ...args) {
+  return new Promise((resolve, reject) => {
+    const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    runner[name](...args);
+  });
+}
+
+function message(text = '', error = false) {
+  $('status').textContent = text;
+  $('status').classList.toggle('error', error);
+}
+
+async function busy(operation) {
+  $('workspace').disabled = true;
+  $('workspace').inert = true;
+  message('جارٍ التنفيذ…');
+  try { await operation(); }
+  catch (error) { message(error.message || String(error), true); }
+  finally { $('workspace').disabled = false; $('workspace').inert = false; }
+}
+
+function button(label, run, description) {
+  const control = document.createElement('button');
+  control.type = 'button';
+  control.textContent = label;
+  if (description) control.setAttribute('aria-label', description);
+  control.addEventListener('click', run);
+  return control;
+}
+
+function canNavigate() {
+  return !dirty || window.confirm('في تعديلات غير محفوظة. تتركها؟');
+}
+
+function show(form) {
+  topicForm.hidden = form !== topicForm;
+  articleForm.hidden = form !== articleForm;
+  $('empty').hidden = Boolean(form);
+  dirty = false;
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const religion = $('religion').value;
+  const topics = index.topics.filter(item => item.religion === religion);
+  $('topics').replaceChildren(...topics.map(item => {
+    const control = button(item.title, () => { if (canNavigate()) openTopic(item); });
+    if (topic?.id === item.id) control.setAttribute('aria-current', 'true');
+    return control;
+  }));
+  $('new-article').disabled = !topic?.id;
+  $('articles').replaceChildren(...index.articles.filter(item => item.topicId === topic?.id).map(item => {
+    const control = button(item.title + (item.published ? ' · منشور' : ' · مسودة'), () => {
+      if (canNavigate()) busy(async () => { openArticle(await rpc('adminArticle', item.id)); message(); });
+    });
+    if (article?.id === item.id) control.setAttribute('aria-current', 'true');
+    return control;
+  }));
+}
+
+function openTopic(item) {
+  topic = item;
+  article = null;
+  $('topic-title').value = item.title;
+  $('topic-order').value = item.order;
+  $('delete-topic').hidden = !item.id;
+  show(topicForm);
+}
+
+function openArticle(item) {
+  article = item;
+  topic = index.topics.find(entry => entry.id === item.draft.topicId);
+  $('religion').value = topic.religion;
+  $('article-title').value = item.draft.title;
+  $('article-order').value = item.draft.order;
+  const options = index.topics.map(entry => {
+    const names = {islam: 'الإسلام', christianity: 'المسيحية', judaism: 'اليهودية'};
+    return new Option(names[entry.religion] + ' / ' + entry.title, entry.id);
+  });
+  $('article-topic').replaceChildren(...options);
+  $('article-topic').value = item.draft.topicId;
+  $('hide-article').hidden = !item.live;
+  $('delete-article').hidden = !item.id;
+  const publicLink = $('public-link');
+  publicLink.hidden = !item.live;
+  publicLink.rel = 'noopener noreferrer';
+  publicLink.href = site + '?article=' + encodeURIComponent(item.id || '');
+  blocks.replaceChildren();
+  currentBlock = null;
+  selection = null;
+  for (const block of item.draft.blocks) addBlock(block);
+  if (!blocks.children.length) addBlock({type: 'p'});
+  show(articleForm);
+}
+
+function cleanHTML(html) {
+  const source = document.createElement('template');
+  source.innerHTML = html;
+  const out = document.createElement('div');
+  function copy(input, output) {
+    for (const child of input.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) output.append(document.createTextNode(child.data));
+      if (child.nodeType !== Node.ELEMENT_NODE || discard.has(child.localName)) continue;
+      if (!markup.has(child.localName)) { copy(child, output); continue; }
+      const node = document.createElement(child.localName);
+      if (node.localName === 'a') {
+        const href = child.getAttribute('href') || '';
+        if (/^https?:\/\//i.test(href)) node.setAttribute('href', href);
+      }
+      copy(child, node);
+      output.append(node);
+    }
+  }
+  copy(source.content, out);
+  return out.innerHTML;
+}
+
+function addBlock(block, after) {
+  const node = document.createElement('section');
+  node.className = 'block';
+  node.dataset.type = block.type;
+  const controls = document.createElement('div');
+  controls.className = 'block-controls';
+  const label = document.createElement('span');
+  label.textContent = labels[block.type];
+  controls.append(label, button('↑', () => {
+    if (node.previousElementSibling) blocks.insertBefore(node, node.previousElementSibling);
+    dirty = true;
+  }, 'نقل للأعلى'), button('↓', () => {
+    if (node.nextElementSibling) blocks.insertBefore(node.nextElementSibling, node);
+    dirty = true;
+  }, 'نقل للأسفل'), button('حذف', () => {
+    node.remove();
+    if (currentBlock === node) currentBlock = null;
+    dirty = true;
+  }, 'حذف الكتلة'));
+  node.append(controls);
+  if (block.type === 'image') {
+    node.dataset.id = block.id || '';
+    const img = document.createElement('img');
+    img.alt = '';
+    const alt = document.createElement('input');
+    alt.placeholder = 'وصف الصورة';
+    alt.setAttribute('aria-label', 'وصف الصورة');
+    alt.value = block.alt || '';
+    const feedback = document.createElement('span');
+    feedback.className = 'image-status';
+    node.append(img, alt, feedback);
+    if (block.id) {
+      const observer = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        observer.disconnect();
+        rpc('adminImage', block.id).then(src => { img.src = src; })
+          .catch(() => { feedback.textContent = 'تعذّرت معاينة الصورة.'; });
+      }, {rootMargin: '180px'});
+      observer.observe(node);
+    }
+  } else {
+    const input = document.createElement('div');
+    input.className = 'editable';
+    input.contentEditable = 'true';
+    input.setAttribute('role', 'textbox');
+    input.setAttribute('aria-label', labels[block.type]);
+    input.setAttribute('aria-multiline', 'true');
+    input.dataset.placeholder = labels[block.type];
+    input.innerHTML = cleanHTML(block.html || '');
+    node.append(input);
+  }
+  node.addEventListener('focusin', () => { currentBlock = node; });
+  if (after?.parentNode === blocks) after.after(node);
+  else blocks.append(node);
+  return node;
+}
+
+function dataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('تعذّرت قراءة الصورة.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function prepare(file) {
+  if (file.size <= 3 * 1024 * 1024) return file;
+  if (file.type === 'image/gif') throw new Error('صورة GIF تتجاوز 3 ميغابايت.');
+  const image = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, 2400 / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    const result = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', .9));
+    if (!result || result.size > 3 * 1024 * 1024) throw new Error('تعذّر تصغير الصورة إلى 3 ميغابايت.');
+    return result;
+  } finally { image.close(); }
+}
+
+async function upload(node, file) {
+  const status = node.querySelector('.image-status');
+  pending++;
+  status.textContent = 'جارٍ الرفع…';
+  try {
+    const image = await prepare(file);
+    const src = await dataURL(image);
+    node.querySelector('img').src = src;
+    if (!node.isConnected) return;
+    const {id} = await rpc('adminUploadImage', image.type, src.split(',')[1]);
+    node.dataset.id = id;
+    status.textContent = '';
+  } catch (error) {
+    status.textContent = 'فشل الرفع. ';
+    status.append(button('إعادة المحاولة', () => upload(node, file)));
+    message(error.message || String(error), true);
+  } finally { pending--; }
+}
+
+function insertImages(files, after) {
+  for (const file of files) {
+    if (!accepted.has(file.type)) { message('صيغة الصورة غير مدعومة.', true); continue; }
+    const node = addBlock({type: 'image'}, after);
+    dirty = true;
+    after = node;
+    upload(node, file);
+  }
+  currentBlock = after;
+}
+
+function articleInput() {
+  const data = [...blocks.children].map(node => {
+    const type = node.dataset.type;
+    if (type === 'image') {
+      if (!node.dataset.id) throw new Error('انتظر رفع الصور أو احذف الصورة اللي فشل رفعها.');
+      return {type, id: node.dataset.id, alt: node.querySelector('input').value};
+    }
+    const input = node.querySelector('.editable');
+    return {type, html: cleanHTML(input.innerHTML), text: input.innerText};
+  });
+  return {id: article.id || '', rev: article.rev || 0, topicId: $('article-topic').value,
+    title: $('article-title').value, order: $('article-order').valueAsNumber, blocks: data};
+}
+
+$('religion').addEventListener('change', () => {
+  if (canNavigate()) { topic = null; article = null; show(null); }
+  else $('religion').value = topic.religion;
+});
+$('new-topic').addEventListener('click', () => {
+  if (canNavigate()) openTopic({religion: $('religion').value, title: '', order: 0});
+});
+$('new-article').addEventListener('click', () => {
+  if (canNavigate()) openArticle({draft: {topicId: topic.id, title: '', order: 0, blocks: []}});
+});
+$('editor').addEventListener('input', () => { dirty = true; });
+topicForm.addEventListener('submit', event => {
+  event.preventDefault();
+  busy(async () => {
+    const saved = await rpc('adminSaveTopic', {id: topic.id || '', rev: topic.rev || 0, religion: topic.religion,
+      title: $('topic-title').value, order: $('topic-order').valueAsNumber});
+    dirty = false;
+    index = await rpc('adminIndex');
+    openTopic(saved);
+    message('انحفظ الموضوع.');
+  });
+});
+$('delete-topic').addEventListener('click', () => {
+  if (!window.confirm('تحذف الموضوع؟')) return;
+  busy(async () => {
+    await rpc('adminDeleteTopic', topic.id, topic.rev);
+    dirty = false;
+    index = await rpc('adminIndex');
+    topic = null;
+    show(null);
+    message('انحذف الموضوع.');
+  });
+});
+articleForm.addEventListener('submit', event => {
+  event.preventDefault();
+  if (pending) { message('استنّى يخلص رفع الصور.', true); return; }
+  const action = event.submitter?.value || 'draft';
+  if (action === 'hide' && !window.confirm('تخفي النسخة المنشورة وتحفظ التعديلات كمسودة؟')) return;
+  busy(async () => {
+    const saved = await rpc('adminSaveArticle', articleInput(), action);
+    dirty = false;
+    index = await rpc('adminIndex');
+    openArticle(saved);
+    message({draft: 'انحفظت المسودة.', publish: 'اننشر المقال.', hide: 'انخفى المقال.'}[action]);
+  });
+});
+$('delete-article').addEventListener('click', () => {
+  if (!window.confirm('تحذف المقال ومسودته؟')) return;
+  busy(async () => {
+    await rpc('adminDeleteArticle', article.id, article.rev);
+    dirty = false;
+    index = await rpc('adminIndex');
+    openTopic(topic);
+    message('انحذف المقال.');
+  });
+});
+
+$('insert').addEventListener('click', event => {
+  const type = event.target.dataset.block;
+  if (!type) return;
+  const node = addBlock({type}, currentBlock);
+  dirty = true;
+  node.querySelector('.editable').focus();
+});
+document.addEventListener('selectionchange', () => {
+  const active = window.getSelection();
+  if (!active.rangeCount) return;
+  const range = active.getRangeAt(0);
+  const common = range.commonAncestorContainer;
+  const field = (common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement).closest('.editable');
+  if (field && blocks.contains(field)) selection = {range: range.cloneRange(), field};
+});
+$('format').addEventListener('mousedown', event => {
+  if (event.target.dataset.command) event.preventDefault();
+});
+$('format').addEventListener('click', event => {
+  const command = event.target.dataset.command;
+  if (!command || !selection?.field.isConnected) return;
+  const saved = selection;
+  let value;
+  if (command === 'createLink') {
+    if (saved.range.collapsed) { message('ظلّل النص اللي بدك تربطه أول.', true); return; }
+    const href = window.prompt('رابط المصدر أو المقال');
+    if (!href) return;
+    try {
+      const url = new URL(href, site);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
+      value = url.href;
+    } catch { message('استخدم رابط HTTP أو HTTPS صالح.', true); return; }
+  }
+  saved.field.focus();
+  const range = window.getSelection();
+  range.removeAllRanges();
+  range.addRange(saved.range);
+  document.execCommand(command, false, value);
+  dirty = true;
+});
+$('pick-image').addEventListener('click', () => $('file-input').click());
+$('file-input').addEventListener('change', event => {
+  insertImages([...event.target.files], currentBlock);
+  event.target.value = '';
+});
+articleForm.addEventListener('paste', event => {
+  const files = [...event.clipboardData.files];
+  if (!files.length) {
+    for (const item of event.clipboardData.items) {
+      const file = item.kind === 'file' && item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  if (files.length) {
+    event.preventDefault();
+    insertImages(files, event.target.closest('.block') || currentBlock);
+  } else if (event.target.closest('.editable')) {
+    event.preventDefault();
+    document.execCommand('insertText', false, event.clipboardData.getData('text/plain'));
+    dirty = true;
+  }
+});
+articleForm.addEventListener('dragover', event => {
+  if (!event.dataTransfer.types.includes('Files')) return;
+  event.preventDefault();
+  blocks.classList.add('over');
+});
+articleForm.addEventListener('dragleave', event => {
+  if (!articleForm.contains(event.relatedTarget)) blocks.classList.remove('over');
+});
+articleForm.addEventListener('drop', event => {
+  event.preventDefault();
+  blocks.classList.remove('over');
+  insertImages([...event.dataTransfer.files], event.target.closest('.block') || currentBlock);
+});
+window.addEventListener('beforeunload', event => {
+  if (!dirty) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
+busy(async () => {
+  index = await rpc('adminIndex');
+  renderSidebar();
+  message();
+});
+</script>
+</body>
+</html>
